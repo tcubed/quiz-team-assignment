@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Quiz Meet Prelim</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.16.0/umd/popper.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.0/js/bootstrap.min.js"></script>
+
+
+    <style>
+    table, th, td, tr {
+    border: 1px solid black;
+    border-collapse: collapse;
+    min-width: 1em;
+    min-height: 30px;
+    }
+    </style>
+
+<script>
+function tableHTML(X,err){
+    var v;
+    var red,grn,blu,go;
+    
+    var txt='<table border=1>'
+    
+    for(var ri=0;ri<X.length;ri++){
+        txt+='<tr>'
+        for(var ci=0;ci<X[ri].length;ci++){
+            v='';
+            //if(X[ri][ci]>0){v=X[ri][ci];}
+            v=X[ri][ci]+1;
+            txt+='<td'
+            red=0;grn=0;blu=0;go=0;
+            roomIdx=Math.floor(ci/3)
+            red=150+105*((roomIdx%3)==0);go=1
+            blu=150+105*((roomIdx%3)==1);go=1
+            grn=150+105*((roomIdx%3)==2);go=1
+            if(go){txt+=' style="background-color:rgb('+red+','+grn+','+blu+')"'}
+            
+            txt+='>'+v+'</td>'
+        }
+        txt+='</tr>'
+    }
+    txt+='</table>'
+    return txt
+}
+function matShow(arr,rowhdr,colhdr,limit){
+    var v;
+    var red,grn,blu,go;
+    // default rowhdr
+    if(typeof rowhdr == 'undefined'){
+        rowhdr=[];
+        for(var ii=0;ii<arr.length;ii++){
+            rowhdr.push(ii+1)
+        }
+    }
+    // default colhdr
+    if(typeof colhdr == 'undefined'){
+        colhdr=[];
+        for(var ii=0;ii<arr[0].length;ii++){
+            colhdr.push(ii+1)
+        }
+    }
+    // limit
+    if(typeof limit == 'undefined'){
+        limit=1
+    }
+    
+    var txt='<table border=1>'
+
+    //
+    // column header
+    //
+    txt+='<tr><th></th>'
+    for(var ci=0;ci<colhdr.length;ci++){
+        txt+='<th>'+colhdr[ci]+'</th>'
+    }
+    txt+='</tr>'
+
+    for(var ri=0;ri<arr.length;ri++){
+        txt+='<tr>'
+        // 
+        // row header
+        //
+        txt+='<th>'+rowhdr[ri]+'</th>'
+        // data
+        for(var ci=0;ci<arr[ri].length;ci++){
+            v=arr[ri][ci];
+            txt+='<td'
+            red=0;grn=0;blu=0;go=0;
+            if(v>limit){
+                txt+=' style="background-color:rgb(255,127,127)"'
+            }
+            txt+='>'+v+'</td>'
+        }
+        txt+='</tr>'
+    }
+    txt+='</table>'
+    return txt
+}
+
+function showHTML(suffix,X,E,iter,err){
+    var e=document.getElementById('soln'+suffix)
+    e.innerHTML=tableHTML(X,err)
+
+    var e=document.getElementById('score'+suffix)
+    e.innerHTML='Score: '+E+' (iter: '+iter+')'
+}
+function shuffle(array) {
+    var currentIndex = array.length, temporaryValue, randomIndex;
+
+    // While there remain elements to shuffle...
+    while (0 !== currentIndex) {
+
+        // Pick a remaining element...
+        randomIndex = Math.floor(Math.random() * currentIndex);
+        currentIndex -= 1;
+
+        // And swap it with the current element.
+        temporaryValue = array[currentIndex];
+        array[currentIndex] = array[randomIndex];
+        array[randomIndex] = temporaryValue;
+    }
+    return array;
+}
+function guess(X){
+    // loop over subblocks
+    var ri,ci;
+    for(var r1=0;r1<3;r1++){
+        for(var c1=0;c1<3;c1++){
+            // how many open spots in this subblock
+            var taken=[]
+            for(var r2=0;r2<3;r2++){
+                ri=r1*3+r2
+                for(var c2=0;c2<3;c2++){
+                    ci=c1*3+c2
+                    if(X[ri][ci]>0){taken.push(X[ri][ci]);}
+                }
+            }
+
+            // numbers left
+            var remaining=[]
+            for(var ii=0;ii<9;ii++){
+                if(taken.indexOf(ii+1)<0){remaining.push(ii+1);}
+            }
+
+            // shuffle list
+            remaining=shuffle(remaining)
+
+            // populate guess
+            for(var r2=0;r2<3;r2++){
+                ri=r1*3+r2
+                for(var c2=0;c2<3;c2++){
+                    ci=c1*3+c2
+                    if(X[ri][ci]<1){X[ri][ci]=remaining.pop()}
+                }
+            }
+
+        }
+    }
+    return X;
+}
+function scoreState(X,verbose){
+    // implement each of the rules or constraints
+    function burp(x){
+        console.log(x)
+    }
+    // "energy" of solution (ideally = 0)
+    var E=0
+    errStat.room=matInit([NROOM,NTEAM],0)
+    errStat.team=matInit([NTEAM,NTEAM],0)
+
+    // 
+    // ROOM BALANCE: teams should be in each room equally
+    //
+    var penalty=1;
+    // -- init room count
+    roomCount=matInit([NROOM,NTEAM],0)
+    // -- count up times in each room
+    // loop over quizzes
+    for(var ii=0;ii<X.length;ii++){
+        // loop over teams
+        for(var jj=0;jj<X[ii].length;jj++){
+            var roomIdx=Math.floor(jj/3)
+            roomCount[roomIdx][X[ii][jj]]++;
+            errStat.room[roomIdx][X[ii][jj]]+=1
+        }
+    }
+    // now add penalty for multiple visits of a room
+    for(var ii=0;ii<NROOM;ii++){
+        for(var jj=0;jj<NTEAM;jj++){
+            E+=Math.pow(Math.abs(roomCount[ii][jj]-1),2)*penalty
+            
+        }
+    }
+
+    //
+    // OPPONENT BALANCE: teams should visit each other equally
+    //
+    var penalty=1;
+    // -- init opponent count
+    var oppCount=matInit([NTEAM,NTEAM],0)
+    // -- count up times competing with each opposing team
+    // loop over quizzes
+    for(var ii=0;ii<X.length;ii++){
+        // loop over teams
+        for(var jj=0;jj<X[ii].length;jj++){
+            t1=X[ii][jj]
+            var roomIdx=Math.floor(jj/3)
+            // brute force, TODO: better logic
+            for(var kk=0;kk<X[ii].length;kk++){
+                if(kk==jj){continue}
+                var roomIdx2=Math.floor(kk/3)
+                if(roomIdx2!=roomIdx){continue}
+                t2=X[ii][kk]
+                oppCount[t1][t2]+=1
+                errStat.team[t1][t2]+=1
+            }
+        }
+    }
+    // now add penalty for multiple visits of a team
+    for(var ii=0;ii<NTEAM;ii++){
+        for(var jj=0;jj<NTEAM;jj++){
+            if(oppCount[ii][jj]>1){
+                E+=(oppCount[ii][jj]-1)*penalty
+            }
+            
+        }
+    }
+
+    return E;
+}
+
+function swap(X){
+    // pick a quiz to shuffle teams in
+    var idx=[]
+    for (var ii=1;ii<NQUIZ;ii++){idx.push(ii)}
+    quizzes=shuffle(idx);
+
+    // pick two teams to swap
+    var teams=[]
+    for(var ii=0;ii<NTEAM;ii++){
+        teams.push(ii)
+    }
+    teams=shuffle(teams);
+
+    // do the swap
+    var t1=X[quizzes[0]][teams[0]]
+    X[quizzes[0]][teams[0]]=X[quizzes[0]][teams[1]]
+    X[quizzes[0]][teams[1]]=t1
+    return X
+}
+
+function matInit(sz,val){
+    // initialize a sz[0] by sz[1] matrix 
+    // if no arg provided, make an index matrix [[0,1,2,3...],[0,1,2,3,...],...]
+    // if scalar provided, make constant value (e.g. zeros)
+    var index=false;
+    if(typeof val == 'undefined'){index=true;}
+    X0=[]
+    for (var jj=0;jj<sz[0];jj++){
+        X0.push([])
+        for (var ii=0;ii<sz[1];ii++){
+            if(index){X0[jj].push(ii)}
+            else{X0[jj].push(val)}
+        }
+    }
+    return X0
+}
+function matCopy(X){
+    var X1=[]
+    for(var ii=0;ii<X.length;ii++){
+        X1.push([])
+        for(var jj=0;jj<X[ii].length;jj++){
+            X1[ii].push(X[ii][jj])
+        }
+    }
+    return X1
+}
+function temperature(r){
+    return Tinit*(1-r)
+}
+function anneal(verbose){
+    // perform a single annealing step
+    var E1,err1;
+    // make a copy of the current state
+    X1=matCopy(X);
+    // swap two teams
+    var X1=swap(X1);
+    // calculate the score
+    var E1=scoreState(X1,0);
+    iter++;
+    // update temperature
+    T=temperature(iter/nmax)
+
+    if(E1<E){
+        // if energy is lower, automatically accept transition
+        if(verbose){console.log(E1+'<'+E+': accept transition!')}
+        E=E1;
+        X=X1;
+        err=err1;
+    }
+    else{
+        // if energy is higher, accept according to Boltzmann energy
+        if(verbose){console.log(E1+' not better than '+E)}
+        var paccept=Math.exp(-(E1-E)/T)
+        var rval=Math.random()
+        if(rval<paccept){
+            if(verbose){console.log(rval+'<'+paccept+': go for it')}
+            E=E1;
+            X=X1;
+            err=err1;
+        }
+        else{
+            if(verbose){console.log(rval+'>'+paccept+': nah.')}
+        }
+    }
+}
+function annealStart(){
+    // start an annealling run
+    reset();
+    while((iter<nmax)&&(Ebest>Estop)){
+        //console.log(iter+','+nmax)
+        annealNsteps(updateIncrement,0)
+    }
+    annealDone()
+}
+function annealNsteps(n,verbose){
+    // anneal for N steps
+    for(var ii=0;ii<n;ii++){
+        anneal(verbose)
+        if(E<Ebest){
+            Xbest=matCopy(X);
+            Ebest=E;
+            errStatBest.room=matCopy(errStat.room)
+            errStatBest.team=matCopy(errStat.team)
+        }
+        if((E<=Estop)||(iter>=nmax)){break}
+    }
+
+    var e=document.getElementById('msg')
+    e.value=debugmsg();
+}
+function annealDone(){
+    // annealing completion
+    console.log('annealDone')
+    
+    // calc scores for last
+    E=scoreState(X)
+    //E=ret[0];err=ret[1]
+    showHTML('Last',X,E,iter,err)
+    showHTML('Best',Xbest,Ebest,iter,errBest)
+
+    // room errors
+    var e=document.getElementById('errRoom')
+    e.innerHTML=matShow(errStatBest.room)
+
+    // room errors
+    var e=document.getElementById('errTeam')
+    e.innerHTML=matShow(errStatBest.team)
+
+    irestart+=1;
+    if((irestart<maxrestart)&&(Ebest>Estop)){
+        iter=0;
+        //annealNsteps(updateIncrement,0)
+        while((iter<nmax) && (Ebest>Estop)){
+            //console.log(iter+','+nmax)
+            annealNsteps(updateIncrement,0)
+        }
+        annealDone()
+    }
+    else{
+        // write out the logs for the best
+        scoreState(Xbest,1)
+        
+    }
+}
+function reset(){
+    // reset iterations, restarts, and read from GUI
+    iter=0;
+    irestart=0;
+    var e=document.getElementById('maxiter')
+    nmax=Number(e.value)
+    var e=document.getElementById('maxRestart')
+    maxrestart=Number(e.value)
+    var e=document.getElementById('Tinit')
+    Tinit=Number(e.value)
+}
+function debugmsg(){
+    msg='Score: '+E+', iter: '+iter+', T: '+temperature(iter/nmax).toFixed(3)+', irestart:'+irestart
+    console.log(msg)
+    return msg
+}
+function startup(){
+    // initial assignment of positions
+    X0=matInit([NQUIZ,NTEAM])
+    X=matCopy(X0)
+    errStat.room=matInit([NROOM,NTEAM],0)
+    errStat.team=matInit([NTEAM,NTEAM],0)
+    // get initial score
+    E=scoreState(X,0);
+    
+    // initialize the "best" score found
+    Xbest=matCopy(X);
+    Ebest=E
+    errStatBest.room=matCopy(errStat.room)
+    errStatBest.team=matCopy(errStat.team)
+
+    err=[]
+    showHTML('Last',X,E,iter,err)
+    showHTML('Best',Xbest,Ebest,iter,err)
+
+    // room errors
+    var e=document.getElementById('errRoom')
+    e.innerHTML=matShow(errStat.room)
+
+    // room errors
+    var e=document.getElementById('errTeam')
+    e.innerHTML=matShow(errStat.team)
+}
+
+// hardcode (for now) bracket dimensions
+var NTEAM=18
+var NROOM=6
+var NQUIZ=7
+
+// error diagnostic/statistic objects
+var errStat={}
+var errStatBest={}
+
+// configuration
+var X=[];
+// energy
+var E=1000;
+
+// best
+var Xbest=[];
+var Ebest;
+
+// stopping criterion
+var Estop=0;
+// initial temperature
+var Tinit=1;
+
+var updateIncrement=50000
+var iter=0
+var nmax=1000000;
+
+var irestart=0;
+var maxrestart=2;
+</script>
+
+
+
+</head>
+<body>
+    <h2>3-Team Prelim Quiz Generator</h2>
+    <p>Groups of 3 columns are individual rooms (currently 6).  Diagnostic information is shown in the Developer Window (F12 in Chrome)</p>
+    <table>
+        <tr><td>
+                <h6>Last Configuration</h6>
+                <div id="solnLast"></div>
+                <div id="scoreLast"></div>
+            </td>
+            <td>
+                <h6>Best Configuration</h6>
+                <div id="solnBest"></div>
+                <div id="scoreBest"></div>
+            </td>
+        </tr>
+    </table>
+
+    <div class="container-fluid">
+        <h4>Generate brackets</h4>
+        <div class="row">
+            <div class="col-sm-3">
+                <button onclick="annealStart()">annealN</button>
+                <input id="msg" readonly=True value=""></input>
+            </div>
+            <div class="col-sm-3">
+                <h6>Max iterations</h6>
+                <input id="maxiter" value="1000000" onchange="reset()"></input>
+            </div>
+            <div class="col-sm-3">
+                <h6>Tinit</h6>
+                <input id="Tinit" value="1" onchange="reset()"></input>
+            </div>
+            <div class="col-sm-3">
+                <h6>Max Restarts</h6>
+                <input id="maxRestart" value="2" onchange="reset()"></input>
+            </div>
+        </div>
+
+
+        <h4>Room Visits</h4>
+        <p>Show the number of times a team (column) quizzes in a particular room (row).  Ideally,
+            teams will be balanced across all rooms.  Flagged if more than once.
+        </p>
+        <div id="errRoom"></div>
+
+        <h4>Team-Team Meetups</h4>
+        <p>Show the number of times a team meets another team.  Flagged if meets more than once.</p>
+        <div id="errTeam"></div>
+    </div>
+
+    <!--
+    <h6>legend</h6>
+    <p><span style="background-color:red">seq</span>
+        <span style="background-color:blue">king</span>
+        <span style="background-color:green">knight</span>
+    </p>
+    -->
+
+    <script>
+        startup();
+    </script>
+</body>
+
+</html>
