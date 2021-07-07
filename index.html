@@ -17,10 +17,13 @@
     min-width: 1em;
     min-height: 30px;
     }
+    dd {
+        font-size: 80%;
+    }
     </style>
 
 <script>
-function tableHTML(X,err){
+function configurationTableHTML(X,errData){
     var v;
     var red,grn,blu,go;
     
@@ -35,9 +38,14 @@ function tableHTML(X,err){
             txt+='<td'
             red=0;grn=0;blu=0;go=0;
             roomIdx=Math.floor(ci/3)
-            red=150+105*((roomIdx%3)==0);go=1
-            blu=150+105*((roomIdx%3)==1);go=1
-            grn=150+105*((roomIdx%3)==2);go=1
+            if(roomIdx<NROOMLOC){
+                red=150+105*((roomIdx%3)==0);go=1
+                blu=150+105*((roomIdx%3)==1);go=1
+                grn=150+105*((roomIdx%3)==2);go=1
+            }
+            else{
+                red=150;grn=150;blu=150;go=1;
+            }
             if(go){txt+=' style="background-color:rgb('+red+','+grn+','+blu+')"'}
             
             txt+='>'+v+'</td>'
@@ -47,7 +55,7 @@ function tableHTML(X,err){
     txt+='</table>'
     return txt
 }
-function matShow(arr,rowhdr,colhdr,limit){
+function matShow(arr,mattype,rowhdr,colhdr,limit){
     var v;
     var red,grn,blu,go;
     // default rowhdr
@@ -91,9 +99,30 @@ function matShow(arr,rowhdr,colhdr,limit){
             v=arr[ri][ci];
             txt+='<td'
             red=0;grn=0;blu=0;go=0;
-            if(v>limit){
-                txt+=' style="background-color:rgb(255,127,127)"'
+            if(mattype=='room'){
+                // if a room matrix, then apply room styling
+                if(ri<NROOMLOC){
+                    if(v>limit){
+                        txt+=' style="background-color:rgb(255,127,127)"'
+                    }
+                }
+                else{
+                    
+                    if(v>limit){
+                        txt+=' style="background-color:rgb(127,64,64)"'
+                    }
+                    else{
+                        txt+=' style="background-color:rgb(127,127,127)"'
+                    }
+                }
             }
+            else{
+                // otherwise, only normal >limit styling
+                if(v>limit){
+                        txt+=' style="background-color:rgb(255,127,127)"'
+                }
+            }
+            
             txt+='>'+v+'</td>'
         }
         txt+='</tr>'
@@ -102,9 +131,9 @@ function matShow(arr,rowhdr,colhdr,limit){
     return txt
 }
 
-function showHTML(suffix,X,E,iter,err){
+function showHTML(suffix,X,E,iter,errData){
     var e=document.getElementById('soln'+suffix)
-    e.innerHTML=tableHTML(X,err)
+    e.innerHTML=configurationTableHTML(X,errData)
 
     var e=document.getElementById('score'+suffix)
     e.innerHTML='Score: '+E+' (iter: '+iter+')'
@@ -176,7 +205,7 @@ function scoreState(X,verbose){
     // 
     // ROOM BALANCE: teams should be in each room equally
     //
-    var penalty=1;
+    //var penalty=1;
     // -- init room count
     roomCount=matInit([NROOM,NTEAM],0)
     // -- count up times in each room
@@ -188,19 +217,22 @@ function scoreState(X,verbose){
             roomCount[roomIdx][X[ii][jj]]++;
             errStat.room[roomIdx][X[ii][jj]]+=1
         }
+        // loop over rooms
+        //for(var jj=0;jj<NROOM;jj++){
+            
+        //}
     }
     // now add penalty for multiple visits of a room
     for(var ii=0;ii<NROOM;ii++){
         for(var jj=0;jj<NTEAM;jj++){
-            E+=Math.pow(Math.abs(roomCount[ii][jj]-1),2)*penalty
-            
+            E+=Math.pow(Math.abs(roomCount[ii][jj]-1),2)*penaltyRoom;
         }
     }
 
     //
     // OPPONENT BALANCE: teams should visit each other equally
     //
-    var penalty=1;
+    //var penalty=1;
     // -- init opponent count
     var oppCount=matInit([NTEAM,NTEAM],0)
     // -- count up times competing with each opposing team
@@ -221,15 +253,31 @@ function scoreState(X,verbose){
             }
         }
     }
+
+    // avg opp count
+    var avgOppCount=[]
+    for(var ii=0;ii<NTEAM;ii++){
+        var sumCount=0;
+        for(var jj=0;jj<NTEAM;jj++){
+            if(ii==jj){continue;}
+            sumCount+=oppCount[ii][jj]
+        }
+        avgOppCount.push(sumCount/(NTEAM-1));
+    }
+
     // now add penalty for multiple visits of a team
     for(var ii=0;ii<NTEAM;ii++){
         for(var jj=0;jj<NTEAM;jj++){
-            if(oppCount[ii][jj]>1){
-                E+=(oppCount[ii][jj]-1)*penalty
+            //if(oppCount[ii][jj]>1){
+            //    E+=(oppCount[ii][jj]-1)*penalty
+            //}
+            var err=oppCount[ii][jj]-avgOppCount[ii]
+            if(Math.abs(err)>0){
+                E+=Math.pow(err,2)*penaltyTeam;
             }
-            
         }
     }
+    E=Math.round(E*100)/100
 
     return E;
 }
@@ -285,7 +333,7 @@ function temperature(r){
 }
 function anneal(verbose){
     // perform a single annealing step
-    var E1,err1;
+    var E1//,err1;
     // make a copy of the current state
     X1=matCopy(X);
     // swap two teams
@@ -301,7 +349,7 @@ function anneal(verbose){
         if(verbose){console.log(E1+'<'+E+': accept transition!')}
         E=E1;
         X=X1;
-        err=err1;
+        //err=err1;
     }
     else{
         // if energy is higher, accept according to Boltzmann energy
@@ -312,7 +360,7 @@ function anneal(verbose){
             if(verbose){console.log(rval+'<'+paccept+': go for it')}
             E=E1;
             X=X1;
-            err=err1;
+            //err=err1;
         }
         else{
             if(verbose){console.log(rval+'>'+paccept+': nah.')}
@@ -320,10 +368,12 @@ function anneal(verbose){
     }
 }
 function annealStart(){
+    //
+    e=document.getElementById('msg')
+    e.value='working...'
     // start an annealling run
     reset();
     while((iter<nmax)&&(Ebest>Estop)){
-        //console.log(iter+','+nmax)
         annealNsteps(updateIncrement,0)
     }
     annealDone()
@@ -347,27 +397,29 @@ function annealNsteps(n,verbose){
 function annealDone(){
     // annealing completion
     console.log('annealDone')
-    
+    // status
+    e=document.getElementById('msg')
+    e.value='Lowest score: '+E
+
     // calc scores for last
     E=scoreState(X)
     //E=ret[0];err=ret[1]
-    showHTML('Last',X,E,iter,err)
-    showHTML('Best',Xbest,Ebest,iter,errBest)
+    showHTML('Last',X,E,iter,[])
+    showHTML('Best',Xbest,Ebest,iter,[])
 
     // room errors
     var e=document.getElementById('errRoom')
-    e.innerHTML=matShow(errStatBest.room)
+    e.innerHTML=matShow(errStatBest.room,'room')
 
     // room errors
     var e=document.getElementById('errTeam')
-    e.innerHTML=matShow(errStatBest.team)
+    e.innerHTML=matShow(errStatBest.team,'team')
 
     irestart+=1;
     if((irestart<maxrestart)&&(Ebest>Estop)){
         iter=0;
         //annealNsteps(updateIncrement,0)
         while((iter<nmax) && (Ebest>Estop)){
-            //console.log(iter+','+nmax)
             annealNsteps(updateIncrement,0)
         }
         annealDone()
@@ -388,6 +440,10 @@ function reset(){
     maxrestart=Number(e.value)
     var e=document.getElementById('Tinit')
     Tinit=Number(e.value)
+    var e=document.getElementById('penaltyRoom')
+    penaltyRoom=Number(e.value)
+    var e=document.getElementById('penaltyTeam')
+    penaltyTeam=Number(e.value)
 }
 function debugmsg(){
     msg='Score: '+E+', iter: '+iter+', T: '+temperature(iter/nmax).toFixed(3)+', irestart:'+irestart
@@ -395,6 +451,7 @@ function debugmsg(){
     return msg
 }
 function startup(){
+    NROOM=Math.ceil(NTEAM/3)
     // initial assignment of positions
     X0=matInit([NQUIZ,NTEAM])
     X=matCopy(X0)
@@ -409,23 +466,28 @@ function startup(){
     errStatBest.room=matCopy(errStat.room)
     errStatBest.team=matCopy(errStat.team)
 
-    err=[]
-    showHTML('Last',X,E,iter,err)
-    showHTML('Best',Xbest,Ebest,iter,err)
+    // show configuration
+    showHTML('Last',X,E,iter,0)
+    showHTML('Best',Xbest,Ebest,iter,0)
 
     // room errors
     var e=document.getElementById('errRoom')
-    e.innerHTML=matShow(errStat.room)
+    e.innerHTML=matShow(errStat.room,'room')
 
     // room errors
     var e=document.getElementById('errTeam')
-    e.innerHTML=matShow(errStat.team)
+    e.innerHTML=matShow(errStat.team,'team')
 }
-
+function updateSettings(){
+    NTEAM=Number(document.getElementById('nteam').value);
+    NROOMLOC=Number(document.getElementById('nroom').value);
+    NQUIZ=Number(document.getElementById('nquiz').value);
+    startup();
+}
 // hardcode (for now) bracket dimensions
-var NTEAM=18
-var NROOM=6
-var NQUIZ=7
+var NTEAM=12
+var NQUIZ=5
+var NROOMLOC=4
 
 // error diagnostic/statistic objects
 var errStat={}
@@ -451,59 +513,223 @@ var nmax=1000000;
 
 var irestart=0;
 var maxrestart=2;
+var penaltyTeam=0.1;
+var penaltyRoom=1;
 </script>
 
 
 
 </head>
 <body>
-    <h2>3-Team Prelim Quiz Generator</h2>
-    <p>Groups of 3 columns are individual rooms (currently 6).  Diagnostic information is shown in the Developer Window (F12 in Chrome)</p>
-    <table>
-        <tr><td>
-                <h6>Last Configuration</h6>
-                <div id="solnLast"></div>
-                <div id="scoreLast"></div>
-            </td>
-            <td>
-                <h6>Best Configuration</h6>
-                <div id="solnBest"></div>
-                <div id="scoreBest"></div>
-            </td>
-        </tr>
-    </table>
-
     <div class="container-fluid">
-        <h4>Generate brackets</h4>
-        <div class="row">
-            <div class="col-sm-3">
-                <button onclick="annealStart()">annealN</button>
-                <input id="msg" readonly=True value=""></input>
+        <h2>3-Team Prelim Quiz Bracket Generator</h2>
+        <p>This generator creates preliminary quiz brackets among 3-team quizzes distributed among
+            a certain number of rooms over a certain number of quizzes.
+        </p>
+        
+        <div class="card-deck">
+            
+            <div class="card">
+                <div class="card-body">
+                    <h4>Prelim Parameters</h4>
+                    <div class="input-group mb-3 input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text font-weight-bold">Teams</span>
+                        </div>
+                        <input type="text" class="form-control" id="nteam"  onchange="updateSettings()" value=12>
+                    </div>
+    
+                    <div class="input-group mb-3 input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text font-weight-bold">Quizzes</span>
+                        </div>
+                        <input type="text" class="form-control" id="nquiz"  onchange="updateSettings()" value=5>
+                    </div>
+
+                    <div class="input-group mb-3 input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text font-weight-bold">Rooms</span>
+                        </div>
+                        <input type="text" class="form-control" id="nroom"  onchange="updateSettings()" value=4>
+                    </div>
+
+                </div>
             </div>
-            <div class="col-sm-3">
-                <h6>Max iterations</h6>
-                <input id="maxiter" value="1000000" onchange="reset()"></input>
+            
+            <div class="card">
+                
+                <div class="card-body">
+                    
+                    <div class="row">
+                        <div class="col-sm-4">
+                            <h4>Solve</h4>
+                            <button onclick="annealStart()" > Solve</button>
+                        </div>
+                        <div class="col-sm-8">
+                            <p class="small">Keep re-solving for better scores.</p>
+                            <p class="small">See the solver log in the Developer Window (F12 in Chrome)</p>
+                        </div>
+                    </div>
+                    
+                    <!--<input id="msg" readonly=True value=""></input>-->
+
+                    <div class="form-group">
+                        <label for="comment">Status:</label>
+                        <textarea class="form-control" rows="3" id="msg" readonly=True></textarea>
+                    </div>
+
+                </div>
             </div>
-            <div class="col-sm-3">
-                <h6>Tinit</h6>
-                <input id="Tinit" value="1" onchange="reset()"></input>
+        
+            <div class="card">
+                <div class="card-body">
+                    <h4>Solver Settings</h4>
+                    <div class="input-group mb-3 input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text font-weight-bold">
+                                
+                                <a href="#" data-toggle="tooltip" title="Fewer teams?  Lower this!  Better solutions?  Raise this!">Max iterations</a>
+                            </span>
+                        </div>
+                        <input type="text" class="form-control" id="maxiter"  onchange="reset()" value=100000>
+                    </div>
+    
+                    <div class="input-group mb-3 input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text font-weight-bold">Tinit</span>
+                        </div>
+                        <input type="text" class="form-control" id="Tinit"  onchange="reset()" value=1>
+                    </div>
+                
+                    <div class="input-group mb-3 input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text font-weight-bold">Max Restarts</span>
+                        </div>
+                        <input type="text" class="form-control" id="maxRestart"  onchange="reset()" value=2>
+                    </div>
+
+                    <div class="input-group mb-3 input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text font-weight-bold">Room Penalty</span>
+                        </div>
+                        <input type="text" class="form-control" id="penaltyRoom" onchange="reset()" value=1>
+                    </div>
+
+                    <div class="input-group mb-3 input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text font-weight-bold">Team Penalty</span>
+                        </div>
+                        <input type="text" class="form-control" id="penaltyTeam" onchange="reset()" value=0.1>
+                    </div>
+
+                </div>
             </div>
-            <div class="col-sm-3">
-                <h6>Max Restarts</h6>
-                <input id="maxRestart" value="2" onchange="reset()"></input>
+                
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h4>Team/Room/Quiz Assignments</h4>
+                
+            </div>
+            <div class="card-deck">
+                <div class="card">
+                    <div class="card-body">
+                        <h6>Last Configuration</h6>
+                        <div id="solnLast"></div>
+                        <div id="scoreLast"></div>
+                        Gray means teams are sitting out.
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-body">
+                        <h6>Best Configuration</h6>
+                        <div id="solnBest"></div>
+                        <div id="scoreBest"></div>
+                        Gray means teams are sitting out.
+                    </div>
+                </div>
             </div>
         </div>
 
+        <div class="card">
+            <div class="card-header">
+                <h4>Room Visits</h4>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-sm-6">
+                        <div id="errRoom"></div>
+                    </div>
+                    <div class="col-sm-6 small">
+                        <p >This matrix shows the number of times a team (column) quizzes in a particular room (row).  Ideally,
+                            teams will be balanced across all rooms.  Cells are flagged red if they visit more 
+                            than once.  Visiting more than once is OK, this just highlights something to watch for.
+                        </p>
+                        <p><span class="font-weight-bold">Key Points:</span> Each COLUMN (i.e. a team) should have nearly the same number
+                        of colored cells (i.e. teams should not visit a particular room more than anyone else.  Also,
+                        each ROW should have about the same distribution of visits (i.e. about the same number of
+                        0,1,2, etc as other rooms).  Gray (i.e. phantom rooms) must be equal for all teams.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <h4>Team-Team Meetups</h4>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-sm-6">
+                        <div id="errTeam"></div>
+                    </div>
+                    <div class="col-sm-6 small">
+                        <p>This matrix shows the number of times a team meets another team.  Flagged if meets more than once.
+                        </p>
+                        <p><span class="font-weight-bold">Key Point:</span> A good configuration will have this 
+                        matrix consisting of a uniform low number, with zeros along the diagonal (team1 meeting
+                        itself doesn't count).  For instance, a matrix of mostly ones means that
+                        every team meets every other team once.  Teams that meet each other more than once
+                    are flagged red.</p>
+                    </div>
+                </div>
 
-        <h4>Room Visits</h4>
-        <p>Show the number of times a team (column) quizzes in a particular room (row).  Ideally,
-            teams will be balanced across all rooms.  Flagged if more than once.
-        </p>
-        <div id="errRoom"></div>
+            </div>
+        </div>
 
-        <h4>Team-Team Meetups</h4>
-        <p>Show the number of times a team meets another team.  Flagged if meets more than once.</p>
-        <div id="errTeam"></div>
+        <div class="card">
+            <div class="card-header">
+                <h4>FAQ</h4>
+            </div>
+            <div class="card-body">
+                
+                <dl>
+                    <dt>Can I do better?</dt>
+                    <dd>
+                        Possibly!  The solver uses <a href="https://en.wikipedia.org/wiki/Simulated_annealing">
+                            Simulated annealing</a> to optimize the configuration.  Think of it as slow cooling down
+                            a system to get a large, perfect crystal.  However, because there are random fluctations
+                            as its cooling down, it's possible that re-solving or adjusting the solver parameters will
+                            give a better solution (i.e. lower score).
+                    </dd>
+                    <dt>Colors</dt>
+                    <dd>
+                        Rooms are colored groups of teams (max of 3).  If you don't have enough rooms
+                        (i.e. not all teams can quiz every round), teams are shuffled into gray "phantom" rooms.
+                    </dd>
+                    <dt>Assignment Scores</dt>
+                    <dd>
+                        The algorithm scores the team-assignments trying to minimize multiple match-ups 
+                        with other teams and multiple visits to the same quiz room.  For rooms, a configuration is 
+                        penalized by room_penalty*(roomVisits-1)^2.  For teams, a configuration is penalized by 
+                        team_penalty*(teamMatchups-averageMatchups)^2.  A lower score is better.
+                    </dd>
+                </dl>
+            </div>
+        </div>
+
     </div>
 
     <!--
@@ -516,6 +742,9 @@ var maxrestart=2;
 
     <script>
         startup();
+        $(document).ready(function(){
+        $('[data-toggle="tooltip"]').tooltip();   
+        });
     </script>
 </body>
 
