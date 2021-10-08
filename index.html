@@ -201,6 +201,7 @@ function scoreState(X,verbose){
     var E=0
     errStat.room=matInit([NROOM,NTEAM],0)
     errStat.team=matInit([NTEAM,NTEAM],0)
+    errStat.bench=matInit([3,NTEAM],0)
 
     // 
     // ROOM BALANCE: teams should be in each room equally
@@ -242,6 +243,9 @@ function scoreState(X,verbose){
         for(var jj=0;jj<X[ii].length;jj++){
             t1=X[ii][jj]
             var roomIdx=Math.floor(jj/3)
+            if(roomIdx>=NROOMLOC){
+                continue;
+            }
             // brute force, TODO: better logic
             for(var kk=0;kk<X[ii].length;kk++){
                 if(kk==jj){continue}
@@ -277,6 +281,31 @@ function scoreState(X,verbose){
             }
         }
     }
+
+    //
+    // BENCH BALANCE
+    // 
+    // -- init bench count
+    benchCount=matInit([3,NTEAM],0)
+    // loop over quizzes
+    for(var ii=0;ii<X.length;ii++){
+        // loop over teams
+        for(var jj=0;jj<X[ii].length;jj++){
+            var roomIdx=Math.floor(jj/3)
+            if(roomIdx>=NROOMLOC){continue;}
+            var benchIdx=jj%3
+            benchCount[benchIdx][X[ii][jj]]++;
+            errStat.bench[benchIdx][X[ii][jj]]+=1
+        }
+    }
+    // now add penalty for multiple visits of a bench
+    for(var ii=0;ii<3;ii++){
+        for(var jj=0;jj<NTEAM;jj++){
+            E+=Math.pow(Math.abs(benchCount[ii][jj]-1),2)*penaltyBench;
+        }
+    }
+
+    // simplify score
     E=Math.round(E*100)/100
 
     return E;
@@ -387,6 +416,7 @@ function annealNsteps(n,verbose){
             Ebest=E;
             errStatBest.room=matCopy(errStat.room)
             errStatBest.team=matCopy(errStat.team)
+            errStatBest.bench=matCopy(errStat.bench)
         }
         if((E<=Estop)||(iter>=nmax)){break}
     }
@@ -411,9 +441,13 @@ function annealDone(){
     var e=document.getElementById('errRoom')
     e.innerHTML=matShow(errStatBest.room,'room')
 
-    // room errors
+    // team errors
     var e=document.getElementById('errTeam')
     e.innerHTML=matShow(errStatBest.team,'team')
+
+    // bench errors
+    var e=document.getElementById('errBench')
+    e.innerHTML=matShow(errStatBest.bench,'bench')
 
     irestart+=1;
     if((irestart<maxrestart)&&(Ebest>Estop)){
@@ -444,6 +478,8 @@ function reset(){
     penaltyRoom=Number(e.value)
     var e=document.getElementById('penaltyTeam')
     penaltyTeam=Number(e.value)
+    var e=document.getElementById('penaltyBench')
+    penaltyBench=Number(e.value)
 }
 function debugmsg(){
     msg='Score: '+E+', iter: '+iter+', T: '+temperature(iter/nmax).toFixed(3)+', irestart:'+irestart
@@ -452,11 +488,13 @@ function debugmsg(){
 }
 function startup(){
     NROOM=Math.ceil(NTEAM/3)
+    //NROOMACTIVE=Math.floor(N)
     // initial assignment of positions
     X0=matInit([NQUIZ,NTEAM])
     X=matCopy(X0)
     errStat.room=matInit([NROOM,NTEAM],0)
     errStat.team=matInit([NTEAM,NTEAM],0)
+    errStat.bench=matInit([3,NTEAM],0)
     // get initial score
     E=scoreState(X,0);
     
@@ -465,6 +503,7 @@ function startup(){
     Ebest=E
     errStatBest.room=matCopy(errStat.room)
     errStatBest.team=matCopy(errStat.team)
+    errStatBest.bench=matCopy(errStat.bench)
 
     // show configuration
     showHTML('Last',X,E,iter,0)
@@ -474,9 +513,13 @@ function startup(){
     var e=document.getElementById('errRoom')
     e.innerHTML=matShow(errStat.room,'room')
 
-    // room errors
+    // team errors
     var e=document.getElementById('errTeam')
     e.innerHTML=matShow(errStat.team,'team')
+
+    // bench errors
+    var e=document.getElementById('errBench')
+    e.innerHTML=matShow(errStat.bench,'bench')
 }
 function updateSettings(){
     NTEAM=Number(document.getElementById('nteam').value);
@@ -515,6 +558,7 @@ var irestart=0;
 var maxrestart=2;
 var penaltyTeam=0.1;
 var penaltyRoom=1;
+var penaltyBench=0.01;
 </script>
 
 
@@ -619,7 +663,14 @@ var penaltyRoom=1;
                         <div class="input-group-prepend">
                             <span class="input-group-text font-weight-bold">Team Penalty</span>
                         </div>
-                        <input type="text" class="form-control" id="penaltyTeam" onchange="reset()" value=0.1>
+                        <input type="text" class="form-control" id="penaltyTeam" onchange="reset()" value=0.2>
+                    </div>
+                    
+                    <div class="input-group mb-3 input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text font-weight-bold">Bench Penalty</span>
+                        </div>
+                        <input type="text" class="form-control" id="penaltyBench" onchange="reset()" value=0.01>
                     </div>
 
                 </div>
@@ -693,6 +744,27 @@ var penaltyRoom=1;
                         itself doesn't count).  For instance, a matrix of mostly ones means that
                         every team meets every other team once.  Teams that meet each other more than once
                     are flagged red.</p>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h4>Bench Visits</h4>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-sm-6">
+                        <div id="errBench"></div>
+                    </div>
+                    <div class="col-sm-6 small">
+                        <p>This matrix shows the number of times a team is on a bench.  Flagged if meets more than once.
+                        </p>
+                        <p><span class="font-weight-bold">Key Point:</span> A good configuration will have each team
+                        on different benchs the same number of times.
+                        </p>
                     </div>
                 </div>
 
